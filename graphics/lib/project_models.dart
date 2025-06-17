@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -144,7 +143,6 @@ class DesignPage {
   }
 }
 
-// Enhanced Canvas Item with Layer Support
 class LayeredCanvasItem {
   final String id;
   final WidgetType type;
@@ -167,6 +165,11 @@ class LayeredCanvasItem {
   }) : properties = properties ?? {};
 
   factory LayeredCanvasItem.fromJson(Map<String, dynamic> json) {
+    final properties = Map<String, dynamic>.from(json['properties'] ?? {});
+
+    // Deserialize Color objects
+    _deserializeColors(properties);
+
     return LayeredCanvasItem(
       id: json['id'],
       type: WidgetType.values.firstWhere((e) => e.toString() == json['type']),
@@ -178,7 +181,7 @@ class LayeredCanvasItem {
         json['size']['width'].toDouble(),
         json['size']['height'].toDouble(),
       ),
-      properties: Map<String, dynamic>.from(json['properties'] ?? {}),
+      properties: properties,
       zIndex: json['zIndex'] ?? 0,
       opacity: json['opacity']?.toDouble() ?? 1.0,
       linkedPageId: json['linkedPageId'],
@@ -186,16 +189,62 @@ class LayeredCanvasItem {
   }
 
   Map<String, dynamic> toJson() {
+    // Create a copy of properties and serialize colors
+    final serializedProperties = Map<String, dynamic>.from(properties);
+    _serializeColors(serializedProperties);
+
     return {
       'id': id,
       'type': type.toString(),
       'position': {'dx': position.dx, 'dy': position.dy},
       'size': {'width': size.width, 'height': size.height},
-      'properties': properties,
+      'properties': serializedProperties,
       'zIndex': zIndex,
       'opacity': opacity,
       'linkedPageId': linkedPageId,
     };
+  }
+
+  // Helper method to serialize Color objects to int values
+  static void _serializeColors(Map<String, dynamic> properties) {
+    final colorKeys = [
+      'color',
+      'backgroundColor',
+      'textColor',
+      'borderColor',
+      // Add more color property keys as needed
+    ];
+
+    for (final key in colorKeys) {
+      if (properties.containsKey(key)) {
+        final value = properties[key];
+        if (value is Color) {
+          properties[key] = value.value; // Convert Color to int
+        } else if (value is MaterialColor) {
+          properties[key] = value.value; // Convert MaterialColor to int
+        }
+      }
+    }
+  }
+
+  // Helper method to deserialize int values back to Color objects
+  static void _deserializeColors(Map<String, dynamic> properties) {
+    final colorKeys = [
+      'color',
+      'backgroundColor',
+      'textColor',
+      'borderColor',
+      // Add more color property keys as needed
+    ];
+
+    for (final key in colorKeys) {
+      if (properties.containsKey(key)) {
+        final value = properties[key];
+        if (value is int) {
+          properties[key] = Color(value); // Convert int back to Color
+        }
+      }
+    }
   }
 
   LayeredCanvasItem copyWith({
