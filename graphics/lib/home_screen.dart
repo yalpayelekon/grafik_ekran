@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:graphics/export_service.dart';
 import 'package:graphics/page_editor.dart';
 import 'project_models.dart';
 import 'project_manager.dart';
@@ -98,6 +99,64 @@ class HomeScreenState extends State<HomeScreen> {
         _showErrorDialog('Failed to delete project: $e');
       }
     }
+  }
+
+  Future<void> _exportProject(Project project) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export Project'),
+        content: const Text('Choose export format:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'json'),
+            child: const Text('JSON Data'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'web'),
+            child: const Text('Web App'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      try {
+        setState(() => isLoading = true);
+
+        if (result == 'json') {
+          await ExportService.exportProjectToJson(project.id);
+          _showSuccessDialog('Project exported as JSON successfully!');
+        } else if (result == 'web') {
+          await ExportService.exportProjectAsWebApp(project.id);
+          _showSuccessDialog('Web app exported successfully!');
+        }
+      } catch (e) {
+        _showErrorDialog('Export failed: $e');
+      } finally {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  void _showSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Success'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorDialog(String message) {
