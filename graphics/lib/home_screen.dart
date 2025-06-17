@@ -253,6 +253,16 @@ class HomeScreenState extends State<HomeScreen> {
                   PopupMenuButton(
                     itemBuilder: (context) => [
                       PopupMenuItem(
+                        value: 'export',
+                        child: const Row(
+                          children: [
+                            Icon(Icons.download, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text('Export'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
                         value: 'delete',
                         child: const Row(
                           children: [
@@ -266,6 +276,8 @@ class HomeScreenState extends State<HomeScreen> {
                     onSelected: (value) {
                       if (value == 'delete') {
                         _deleteProject(project);
+                      } else if (value == 'export') {
+                        _exportProject(project);
                       }
                     },
                   ),
