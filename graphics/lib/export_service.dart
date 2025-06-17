@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
 import 'project_models.dart';
@@ -245,14 +244,14 @@ class WebAppRuntime {
         // Create page container
         const pageContainer = document.createElement('div');
         pageContainer.id = 'page-container';
-        pageContainer.style.cssText = \`
+        pageContainer.style.cssText = `
             width: \${page.pageSize.width}px;
             height: \${page.pageSize.height}px;
             background-color: \${this.colorToHex(page.backgroundColor)};
             position: relative;
             margin: 0 auto;
             overflow: hidden;
-        \`;
+        `;
 
         // Sort items by zIndex
         const sortedItems = page.canvasItems.sort((a, b) => a.zIndex - b.zIndex);
@@ -272,7 +271,7 @@ class WebAppRuntime {
         if (this.history.length > 0) {
             const backBtn = document.createElement('button');
             backBtn.textContent = '← Back';
-            backBtn.style.cssText = \`
+            backBtn.style.cssText = `
                 position: fixed;
                 top: 10px;
                 left: 10px;
@@ -283,7 +282,7 @@ class WebAppRuntime {
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
-            \`;
+            `;
             backBtn.onclick = () => this.goBack();
             appContainer.appendChild(backBtn);
         }
@@ -293,14 +292,14 @@ class WebAppRuntime {
 
     createElementForItem(item) {
         const element = document.createElement('div');
-        element.style.cssText = \`
+        element.style.cssText = `
             position: absolute;
             left: \${item.position.dx}px;
             top: \${item.position.dy}px;
             width: \${item.size.width}px;
             height: \${item.size.height}px;
             opacity: \${item.opacity};
-        \`;
+        `;
 
         switch (item.type) {
             case 'WidgetType.text':
@@ -321,7 +320,7 @@ class WebAppRuntime {
     }
 
     createTextElement(item, element) {
-        element.style.cssText += \`
+        element.style.cssText += `
             display: flex;
             align-items: center;
             justify-content: center;
@@ -330,14 +329,14 @@ class WebAppRuntime {
             font-style: \${item.properties.isItalic ? 'italic' : 'normal'};
             color: \${this.colorToHex(item.properties.color)};
             text-align: center;
-        \`;
+        `;
         element.textContent = item.properties.text || 'Sample Text';
         return element;
     }
 
     createButtonElement(item, element) {
         const button = document.createElement('button');
-        button.style.cssText = \`
+        button.style.cssText = `
             width: 100%;
             height: 100%;
             background-color: \${this.colorToHex(item.properties.backgroundColor)};
@@ -346,7 +345,7 @@ class WebAppRuntime {
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-        \`;
+        `;
         button.textContent = item.properties.text || 'Button';
         
         if (item.linkedPageId) {
@@ -358,19 +357,19 @@ class WebAppRuntime {
     }
 
     createContainerElement(item, element) {
-        element.style.cssText += \`
+        element.style.cssText += `
             background-color: \${this.colorToHex(item.properties.backgroundColor)};
             display: flex;
             align-items: center;
             justify-content: center;
             color: \${this.colorToHex(item.properties.textColor)};
-        \`;
+        `;
         element.textContent = item.properties.text || 'Container';
         return element;
     }
 
     createCardElement(item, element) {
-        element.style.cssText += \`
+        element.style.cssText += `
             background-color: \${this.colorToHex(item.properties.backgroundColor)};
             border-radius: 4px;
             box-shadow: 0 \${item.properties.elevation || 2}px \${(item.properties.elevation || 2) * 2}px rgba(0,0,0,0.2);
@@ -379,7 +378,7 @@ class WebAppRuntime {
             justify-content: center;
             color: \${this.colorToHex(item.properties.textColor)};
             padding: 8px;
-        \`;
+        `;
         element.textContent = item.properties.text || 'Card Widget';
         return element;
     }
@@ -391,13 +390,13 @@ class WebAppRuntime {
             img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
             element.appendChild(img);
         } else {
-            element.style.cssText += \`
+            element.style.cssText += `
                 background-color: #f0f0f0;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 color: #999;
-            \`;
+            `;
             element.textContent = 'No Image';
         }
         return element;
@@ -407,14 +406,14 @@ class WebAppRuntime {
         const input = document.createElement('input');
         input.type = 'text';
         input.placeholder = item.properties.placeholder || 'Enter text...';
-        input.style.cssText = \`
+        input.style.cssText = `
             width: 100%;
             height: 100%;
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 14px;
-        \`;
+        `;
         element.appendChild(input);
         return element;
     }
@@ -442,18 +441,18 @@ class WebAppRuntime {
 
     updateUrl(pageId) {
         if (history.pushState) {
-            history.pushState({ pageId }, '', \`#\${pageId}\`);
+            history.pushState({ pageId }, '', `#\${pageId}`);
         }
     }
 
     showError(message) {
         const appContainer = document.getElementById('app');
-        appContainer.innerHTML = \`
+        appContainer.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
                 <h1 style="color: red;">Error</h1>
                 <p>\${message}</p>
             </div>
-        \`;
+        `;
     }
 }
 
@@ -544,15 +543,15 @@ This web application was created using Flutter Web App Designer.
 - **Default Size:** ${project.defaultPageSize.width.toInt()} × ${project.defaultPageSize.height.toInt()}
 
 ## How to Run
-1. Open \`index.html\` in a web browser
+1. Open `index.html` in a web browser
 2. Or serve from a web server for best results
 
 ## File Structure
-- \`index.html\` - Main HTML file
-- \`data.js\` - Embedded project data
-- \`runtime.js\` - JavaScript runtime engine
-- \`styles.css\` - Styling
-- \`README.md\` - This file
+- `index.html` - Main HTML file
+- `data.js` - Embedded project data
+- `runtime.js` - JavaScript runtime engine
+- `styles.css` - Styling
+- `README.md` - This file
 
 ## Features
 - Responsive design
