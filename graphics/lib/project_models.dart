@@ -169,6 +169,7 @@ class LayeredCanvasItem {
 
     // Deserialize Color objects
     _deserializeColors(properties);
+    _deserializePolygonPoints(properties);
 
     return LayeredCanvasItem(
       id: json['id'],
@@ -247,6 +248,24 @@ class LayeredCanvasItem {
         if (value is int) {
           properties[key] = Color(value); // Convert int back to Color
         }
+      }
+    }
+  }
+
+  // Helper method to ensure polygon point data is strongly typed
+  static void _deserializePolygonPoints(Map<String, dynamic> properties) {
+    if (properties.containsKey('points')) {
+      final rawPoints = properties['points'];
+      if (rawPoints is List) {
+        properties['points'] = rawPoints.map((point) {
+          if (point is Map) {
+            return <String, double>{
+              'dx': (point['dx'] as num).toDouble(),
+              'dy': (point['dy'] as num).toDouble(),
+            };
+          }
+          return point as Map<String, double>;
+        }).toList();
       }
     }
   }
