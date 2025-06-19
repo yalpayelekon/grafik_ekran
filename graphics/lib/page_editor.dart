@@ -44,14 +44,132 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     super.dispose();
   }
 
-  void _handleCanvasTap(Offset localCanvasPosition) {
-    if (creatingPolygonIndex == null) return;
+  // FIX 1: Update _addCanvasItem to create polygons at different positions
+  // FIX 1: Update _addCanvasItem to create polygons at different positions
+  void _addCanvasItem(WidgetType type) {
+    // Calculate position to avoid overlapping
+    Offset newPosition = const Offset(300, 200);
+
+    if (type == WidgetType.polygon) {
+      // For polygons, calculate a position that doesn't overlap with existing polygons
+      final existingPolygons = currentPage.canvasItems
+          .where((item) => item.type == WidgetType.polygon)
+          .toList();
+
+      if (existingPolygons.isNotEmpty) {
+        // Offset each new polygon by 160 pixels to the right, wrapping to next row
+        final offset = existingPolygons.length;
+        final x = 300 + (offset % 3) * 160.0; // 3 polygons per row
+        final y = 200 + (offset ~/ 3) * 120.0; // New row every 3 polygons
+
+        newPosition = Offset(x, y);
+      }
+    }
+
+    final newItem = LayeredCanvasItem(
+      id: _uuid.v4(),
+      type: type,
+      position: newPosition,
+      size: const Size(150, 100),
+      properties: _getDefaultPropertiesForType(type),
+      zIndex: currentPage.canvasItems.length,
+    );
+
+    setState(() {
+      currentPage = currentPage.copyWith(
+        canvasItems: [...currentPage.canvasItems, newItem],
+      );
+      selectedItemIndex = currentPage.canvasItems.length - 1;
+      isPanelExpanded = true;
+
+      if (type == WidgetType.polygon) {
+        creatingPolygonIndex = selectedItemIndex;
+        print('Created new polygon at position: ${newItem.position}');
+      }
+
+      if (type == WidgetType.text) {
+        textController.text = newItem.properties['text'] as String;
+      }
+    });
+  }
+
+  // FIX 2: Update debugPolygonState to show correct polygon info
+  void debugPolygonState() {
+    if (creatingPolygonIndex != null &&
+        creatingPolygonIndex! < currentPage.canvasItems.length) {
+      final item = currentPage.canvasItems[creatingPolygonIndex!];
+      print('=== Polygon Debug ===');
+      print('Creating polygon ID: ${item.id}');
+      print('Item position: ${item.position}');
+      print('Item size: ${item.size}');
+      print('Is creating: ${item.properties['isCreating']}');
+      print('Points: ${item.properties['points']}');
+      print('Selected index: $selectedItemIndex');
+      print('Creating index: $creatingPolygonIndex');
+      print(
+        'Total polygons: ${currentPage.canvasItems.where((i) => i.type == WidgetType.polygon).length}',
+      );
+    } else {
+      print('=== No Active Polygon Creation ===');
+    }
+  }
+
+  // FIX 3: Update _buildPolygonCreationHelper to show the correct polygon
+  Widget _buildPolygonCreationHelper() {
+    if (creatingPolygonIndex == null ||
+        creatingPolygonIndex! >= currentPage.canvasItems.length) {
+      return Container();
+    }
 
     final item = currentPage.canvasItems[creatingPolygonIndex!];
-    if (item.type != WidgetType.polygon || !item.properties['isCreating'])
-      return;
 
-    debugPolygonState();
+    return Positioned(
+      left: item.position.dx,
+      top: item.position.dy,
+      child: Container(
+        width: item.size.width,
+        height: item.size.height,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.blue, width: 2),
+          color: Colors.blue.withOpacity(0.1),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Polygon ${creatingPolygonIndex! + 1}',
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              const Text(
+                'Click here to add points',
+                style: TextStyle(color: Colors.blue, fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // FIX 4: Enhanced _handleCanvasTap with better validation
+  void _handleCanvasTap(Offset localCanvasPosition) {
+    if (creatingPolygonIndex == null ||
+        creatingPolygonIndex! >= currentPage.canvasItems.length) {
+      return;
+    }
+
+    final item = currentPage.canvasItems[creatingPolygonIndex!];
+    if (item.type != WidgetType.polygon || !item.properties['isCreating']) {
+      print('Warning: Trying to add point to non-creating polygon');
+      return;
+    }
+
+    // Convert canvas coordinates to polygon-relative coordinates
     final relativePosition = Offset(
       localCanvasPosition.dx - item.position.dx,
       localCanvasPosition.dy - item.position.dy,
@@ -64,9 +182,11 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         relativePosition.dy > item.size.height) {
       // Show a message that click should be within polygon bounds
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Click within the polygon area (blue container)'),
-          duration: Duration(seconds: 1),
+        SnackBar(
+          content: Text(
+            'Click within Polygon ${creatingPolygonIndex! + 1} area (blue container)',
+          ),
+          duration: const Duration(seconds: 1),
         ),
       );
       return;
@@ -79,11 +199,16 @@ class PageEditorScreenState extends State<PageEditorScreen> {
 
     points.add({'dx': relativePosition.dx, 'dy': relativePosition.dy});
 
-    print('Added point: $relativePosition to polygon at ${item.position}');
+    print(
+      'Added point: $relativePosition to polygon ${item.id} at ${item.position}',
+    );
     _updateItemProperty(item, 'points', points);
+
+    // Call debug after update
+    debugPolygonState();
   }
 
-  // 2. Fix the finish polygon method with proper state management
+  // FIX 5: Enhanced _finishPolygon method
   void _finishPolygon(LayeredCanvasItem item) {
     final points = List<Map<String, double>>.from(
       item.properties['points'] ?? [],
@@ -95,6 +220,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       );
       return;
     }
+
+    print('Finishing polygon ${item.id} with ${points.length} points');
 
     // Update the item to mark it as finished
     setState(() {
@@ -114,12 +241,17 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         // Clear creation state
         creatingPolygonIndex = null;
 
-        print('Polygon finished with ${points.length} points');
+        print('Polygon ${item.id} finished successfully');
+        print(
+          'Creation state cleared. creatingPolygonIndex = $creatingPolygonIndex',
+        );
+
+        // Keep the finished polygon selected
+        selectedItemIndex = itemIndex;
       }
     });
   }
 
-  // 3. Fix the _updateItemProperty method to ensure proper updates
   void _updateItemProperty(LayeredCanvasItem item, String key, dynamic value) {
     setState(() {
       final itemIndex = currentPage.canvasItems.indexWhere(
@@ -223,33 +355,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // 5. Add helper to show polygon creation area
-  Widget _buildPolygonCreationHelper() {
-    if (creatingPolygonIndex == null) return Container();
-
-    final item = currentPage.canvasItems[creatingPolygonIndex!];
-
-    return Positioned(
-      left: item.position.dx,
-      top: item.position.dy,
-      child: Container(
-        width: item.size.width,
-        height: item.size.height,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.blue, width: 2),
-          color: Colors.blue.withOpacity(0.1),
-        ),
-        child: const Center(
-          child: Text(
-            'Click here to add points',
-            style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 6. Update polygon widget builder to show container bounds when creating
   Widget _buildPolygonWidget(LayeredCanvasItem item) {
     final points = List<Map<String, double>>.from(
       item.properties['points'] ?? [],
@@ -352,33 +457,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           'textColor': Colors.white,
         };
     }
-  }
-
-  void _addCanvasItem(WidgetType type) {
-    final newItem = LayeredCanvasItem(
-      id: _uuid.v4(),
-      type: type,
-      position: const Offset(300, 200),
-      size: const Size(150, 100),
-      properties: _getDefaultPropertiesForType(type),
-      zIndex: currentPage.canvasItems.length,
-    );
-
-    setState(() {
-      currentPage = currentPage.copyWith(
-        canvasItems: [...currentPage.canvasItems, newItem],
-      );
-      selectedItemIndex = currentPage.canvasItems.length - 1;
-      isPanelExpanded = true;
-
-      if (type == WidgetType.polygon) {
-        creatingPolygonIndex = selectedItemIndex;
-      }
-
-      if (type == WidgetType.text) {
-        textController.text = newItem.properties['text'] as String;
-      }
-    });
   }
 
   @override
@@ -706,19 +784,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         ),
       ],
     );
-  }
-
-  void debugPolygonState() {
-    if (creatingPolygonIndex != null) {
-      final item = currentPage.canvasItems[creatingPolygonIndex!];
-      print('=== Polygon Debug ===');
-      print('Item position: ${item.position}');
-      print('Item size: ${item.size}');
-      print('Is creating: ${item.properties['isCreating']}');
-      print('Points: ${item.properties['points']}');
-      print('Selected index: $selectedItemIndex');
-      print('Creating index: $creatingPolygonIndex');
-    }
   }
 
   Widget _buildFontSizeSlider(LayeredCanvasItem item) {
