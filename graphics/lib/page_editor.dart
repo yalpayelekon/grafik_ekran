@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:graphics/grid_painter.dart';
 import 'package:uuid/uuid.dart';
 import 'project_models.dart';
 import 'project_manager.dart';
-import 'dart:math' as math;
 
 class PageEditorScreen extends StatefulWidget {
   final Project project;
@@ -23,7 +23,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   int? selectedItemIndex;
   final TextEditingController textController = TextEditingController();
   bool isPanelExpanded = true;
-  bool isLayersPanelExpanded = false;
   static const Uuid _uuid = Uuid();
 
   int? creatingPolygonIndex;
@@ -206,14 +205,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                     width: 300,
                     child: _buildPropertiesPanel(),
                   ),
-                if (isLayersPanelExpanded)
-                  Positioned(
-                    left: 200,
-                    top: 0,
-                    bottom: 0,
-                    width: 250,
-                    child: _buildLayersPanel(),
-                  ),
+
                 if (selectedItemIndex != null)
                   Positioned(
                     right: isPanelExpanded ? 300 : 0,
@@ -447,125 +439,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     }
   }
 
-  Widget _buildLayersPanel() {
-    return Container(
-      color: Colors.white,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[100],
-            child: Row(
-              children: [
-                const Text(
-                  'Layers',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    setState(() {
-                      isLayersPanelExpanded = false;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ReorderableListView.builder(
-              itemCount: currentPage.canvasItems.length,
-              onReorder: (oldIndex, newIndex) {
-                setState(() {
-                  final items = List<LayeredCanvasItem>.from(
-                    currentPage.canvasItems,
-                  );
-                  if (newIndex > oldIndex) newIndex--;
-                  final item = items.removeAt(oldIndex);
-                  items.insert(newIndex, item);
-
-                  // Update z-indices
-                  for (int i = 0; i < items.length; i++) {
-                    items[i] = items[i].copyWith(zIndex: items.length - 1 - i);
-                  }
-
-                  currentPage = currentPage.copyWith(canvasItems: items);
-                });
-              },
-              itemBuilder: (context, index) {
-                final item = currentPage
-                    .canvasItems[currentPage.canvasItems.length - 1 - index];
-                final actualIndex = currentPage.canvasItems.indexOf(item);
-                final isSelected = selectedItemIndex == actualIndex;
-
-                return _buildLayerItem(item, actualIndex, isSelected, index);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLayerItem(
-    LayeredCanvasItem item,
-    int actualIndex,
-    bool isSelected,
-    int listIndex,
-  ) {
-    return Container(
-      key: ValueKey(item.id),
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Card(
-        color: isSelected ? Colors.blue[50] : null,
-        child: ListTile(
-          dense: true,
-          leading: Icon(_getIconForType(item.type), color: Colors.blue[600]),
-          title: Text(
-            _getNameForType(item.type),
-            style: TextStyle(
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          subtitle: Text('Layer ${item.zIndex}'),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Opacity control
-              SizedBox(
-                width: 60,
-                child: Slider(
-                  value: item.opacity,
-                  min: 0.1,
-                  max: 1.0,
-                  divisions: 9,
-                  onChanged: (value) {
-                    setState(() {
-                      final updatedItems = List<LayeredCanvasItem>.from(
-                        currentPage.canvasItems,
-                      );
-                      updatedItems[actualIndex] = item.copyWith(opacity: value);
-                      currentPage = currentPage.copyWith(
-                        canvasItems: updatedItems,
-                      );
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-          onTap: () {
-            setState(() {
-              selectedItemIndex = actualIndex;
-              isPanelExpanded = true;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
   Widget _buildPropertiesPanel() {
     if (selectedItemIndex == null) return Container();
 
@@ -604,8 +477,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 ..._buildPropertiesForType(item),
-                const SizedBox(height: 16),
-                _buildLayerControls(item),
                 const SizedBox(height: 16),
                 _buildPositionControls(item),
                 const SizedBox(height: 16),
@@ -682,55 +553,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           color: Colors.white,
         ),
       ),
-    );
-  }
-
-  Widget _buildLayerControls(LayeredCanvasItem item) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Layer Controls',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            const Text('Z-Index: '),
-            Expanded(
-              child: Slider(
-                value: item.zIndex.toDouble(),
-                min: 0,
-                max: currentPage.canvasItems.length.toDouble(),
-                divisions: currentPage.canvasItems.length,
-                label: item.zIndex.toString(),
-                onChanged: (value) {
-                  _updateItemProperty(item, 'zIndex', value.toInt());
-                },
-              ),
-            ),
-            Text(item.zIndex.toString()),
-          ],
-        ),
-        Row(
-          children: [
-            const Text('Opacity: '),
-            Expanded(
-              child: Slider(
-                value: item.opacity,
-                min: 0.1,
-                max: 1.0,
-                divisions: 9,
-                label: (item.opacity * 100).toInt().toString() + '%',
-                onChanged: (value) {
-                  _updateItemProperty(item, 'opacity', value);
-                },
-              ),
-            ),
-            Text('${(item.opacity * 100).toInt()}%'),
-          ],
-        ),
-      ],
     );
   }
 
@@ -1128,17 +950,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  IconData _getIconForType(WidgetType type) {
-    switch (type) {
-      case WidgetType.text:
-        return Icons.text_fields;
-      case WidgetType.button:
-        return Icons.smart_button;
-      case WidgetType.polygon:
-        return Icons.polyline;
-    }
-  }
-
   List<Widget> _buildPolygonProperties(LayeredCanvasItem item) {
     final isCreating = item.properties['isCreating'] as bool? ?? false;
     final points = List<Map<String, double>>.from(
@@ -1146,7 +957,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
 
     return [
-      // Creation controls
       if (isCreating) ...[
         Container(
           padding: const EdgeInsets.all(12),
@@ -1184,7 +994,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         ),
         const SizedBox(height: 16),
       ] else ...[
-        // Completed polygon info
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -1481,27 +1290,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       ),
     );
   }
-}
-
-class GridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.grey[300]!
-      ..strokeWidth = 0.5;
-
-    // Draw grid lines
-    for (double i = 0; i < size.height; i += 20) {
-      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
-    }
-
-    for (double i = 0; i < size.width; i += 20) {
-      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class PolygonPainter extends CustomPainter {
