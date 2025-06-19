@@ -26,6 +26,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   static const Uuid _uuid = Uuid();
 
   int? creatingPolygonIndex;
+  final GlobalKey _canvasKey = GlobalKey();
 
   @override
   void initState() {
@@ -260,9 +261,12 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       child: Center(
         child: DragTarget<WidgetType>(
           onAcceptWithDetails: (details) {
-            final box = context.findRenderObject() as RenderBox;
-            final localPos = box.globalToLocal(details.offset);
-            _addCanvasItem(details.data, localPos);
+            final box =
+                _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+            if (box != null) {
+              final localPos = box.globalToLocal(details.offset);
+              _addCanvasItem(details.data, localPos);
+            }
           },
           builder: (context, candidate, rejected) {
             return GestureDetector(
@@ -272,6 +276,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                 }
               },
               child: Container(
+                key: _canvasKey,
                 width: currentPage.pageSize.width,
                 height: currentPage.pageSize.height,
                 decoration: BoxDecoration(
