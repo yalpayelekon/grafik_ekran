@@ -519,6 +519,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       margin: const EdgeInsets.only(bottom: 8.0),
       child: Draggable<WidgetType>(
         data: type,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
         feedback: Material(
           color: Colors.white.withOpacity(0.8),
           elevation: 2,
