@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'project_models.dart';
 import 'project_manager.dart';
-import 'file_explorer.dart';
 import 'dart:math' as math;
 
 class PageEditorScreen extends StatefulWidget {
@@ -101,34 +99,11 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     }
   }
 
-  // Get polygon bounds for hit testing
-  Rect _getPolygonBounds(List<Map<String, double>> points) {
-    if (points.isEmpty) return Rect.zero;
-
-    double minX = points.first['dx']!;
-    double maxX = points.first['dx']!;
-    double minY = points.first['dy']!;
-    double maxY = points.first['dy']!;
-
-    for (final point in points) {
-      minX = math.min(minX, point['dx']!);
-      maxX = math.max(maxX, point['dx']!);
-      minY = math.min(minY, point['dy']!);
-      maxY = math.max(maxY, point['dy']!);
-    }
-
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
-
   Future<void> _savePage() async {
     try {
       final updatedPage = currentPage.copyWith(updatedAt: DateTime.now());
       await ProjectManager.savePage(updatedPage);
       setState(() => currentPage = updatedPage);
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Page saved successfully!')));
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -142,14 +117,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         return 'Text';
       case WidgetType.button:
         return 'Button';
-      case WidgetType.image:
-        return 'Image';
-      case WidgetType.container:
-        return 'Container';
-      case WidgetType.card:
-        return 'Card';
-      case WidgetType.input:
-        return 'Input';
       case WidgetType.polygon:
         return 'Polygon';
     }
@@ -179,27 +146,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           'backgroundColor': Colors.blue,
           'textColor': Colors.white,
         };
-
-      case WidgetType.container:
-        return {
-          'text': 'Container',
-          'backgroundColor': Colors.blue[100],
-          'textColor': Colors.black,
-        };
-
-      case WidgetType.card:
-        return {
-          'text': 'Card Widget',
-          'elevation': 2.0,
-          'backgroundColor': Colors.white,
-          'textColor': Colors.black,
-        };
-
-      case WidgetType.input:
-        return {'placeholder': 'Enter text...'};
-
-      case WidgetType.image:
-        return {};
     }
   }
 
@@ -230,43 +176,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     });
   }
 
-  void _deleteSelectedItem() {
-    if (selectedItemIndex != null) {
-      setState(() {
-        final updatedItems = List<LayeredCanvasItem>.from(
-          currentPage.canvasItems,
-        );
-        updatedItems.removeAt(selectedItemIndex!);
-
-        currentPage = currentPage.copyWith(canvasItems: updatedItems);
-        selectedItemIndex = null;
-      });
-    }
-  }
-
-  void _duplicateItem(int itemIndex) {
-    final originalItem = currentPage.canvasItems[itemIndex];
-    final duplicatedItem = LayeredCanvasItem(
-      id: _uuid.v4(),
-      type: originalItem.type,
-      position: originalItem.position + const Offset(20, 20),
-      size: originalItem.size,
-      properties: Map<String, dynamic>.from(originalItem.properties),
-      zIndex: originalItem.zIndex + 1,
-      opacity: originalItem.opacity,
-    );
-    setState(() {
-      currentPage = currentPage.copyWith(
-        canvasItems: [...currentPage.canvasItems, duplicatedItem],
-      );
-      selectedItemIndex = currentPage.canvasItems.length - 1;
-      isPanelExpanded = true;
-      if (duplicatedItem.type == WidgetType.text) {
-        textController.text = duplicatedItem.properties['text'] as String;
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -276,60 +185,19 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.layers),
-            onPressed: () {
-              setState(() {
-                isLayersPanelExpanded = !isLayersPanelExpanded;
-              });
-            },
-            tooltip: 'Toggle Layers Panel',
-          ),
-          IconButton(
             icon: const Icon(Icons.save),
             onPressed: _savePage,
             tooltip: 'Save Page',
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: selectedItemIndex != null ? _deleteSelectedItem : null,
-            tooltip: 'Delete Selected',
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_in),
-            onPressed: () {
-              setState(() {
-                _scale = (_scale * 1.2).clamp(0.1, 3.0);
-                transformationController.value = Matrix4.identity()
-                  ..scale(_scale);
-              });
-            },
-            tooltip: 'Zoom In',
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_out),
-            onPressed: () {
-              setState(() {
-                _scale = (_scale / 1.2).clamp(0.1, 3.0);
-                transformationController.value = Matrix4.identity()
-                  ..scale(_scale);
-              });
-            },
-            tooltip: 'Zoom Out',
           ),
         ],
       ),
       body: Row(
         children: [
-          // Sidebar with draggable components
           _buildSidebar(),
-
-          // Main canvas area
           Expanded(
             child: Stack(
               children: [
                 _buildCanvas(),
-
-                // Properties panel
                 if (selectedItemIndex != null && isPanelExpanded)
                   Positioned(
                     right: 0,
@@ -338,8 +206,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                     width: 300,
                     child: _buildPropertiesPanel(),
                   ),
-
-                // Layers panel
                 if (isLayersPanelExpanded)
                   Positioned(
                     left: 200,
@@ -348,8 +214,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                     width: 250,
                     child: _buildLayersPanel(),
                   ),
-
-                // Properties panel toggle
                 if (selectedItemIndex != null)
                   Positioned(
                     right: isPanelExpanded ? 300 : 0,
@@ -375,10 +239,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           _buildSidebarHeader('Components'),
           _buildDraggable('Text', Icons.text_fields, WidgetType.text),
           _buildDraggable('Button', Icons.smart_button, WidgetType.button),
-          _buildDraggable('Image', Icons.image, WidgetType.image),
-          _buildDraggable('Container', Icons.crop_square, WidgetType.container),
-          _buildDraggable('Card', Icons.credit_card, WidgetType.card),
-          _buildDraggable('Input', Icons.input, WidgetType.input),
           _buildDraggable('Polygon', Icons.polyline, WidgetType.polygon),
         ],
       ),
@@ -584,83 +444,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
             child: Text(properties['text'] as String? ?? 'Button'),
           ),
         );
-
-      case WidgetType.image:
-        final imagePath = properties['imagePath'] as String?;
-        if (imagePath != null && File(imagePath).existsSync()) {
-          return Image.file(
-            File(imagePath),
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                _buildImagePlaceholder(),
-          );
-        }
-        return _buildImagePlaceholder();
-
-      case WidgetType.container:
-        return Container(
-          color: properties['backgroundColor'] as Color? ?? Colors.blue[100],
-          child: Center(
-            child: Text(
-              properties['text'] as String? ?? 'Container',
-              style: TextStyle(
-                color: properties['textColor'] as Color? ?? Colors.black,
-              ),
-            ),
-          ),
-        );
-
-      case WidgetType.card:
-        return Card(
-          elevation: properties['elevation'] as double? ?? 2.0,
-          color: properties['backgroundColor'] as Color? ?? Colors.white,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                properties['text'] as String? ?? 'Card Widget',
-                style: TextStyle(
-                  color: properties['textColor'] as Color? ?? Colors.black,
-                ),
-              ),
-            ),
-          ),
-        );
-
-      case WidgetType.input:
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              enabled: false, // Disabled in editor
-              decoration: InputDecoration(
-                hintText:
-                    properties['placeholder'] as String? ?? 'Enter text...',
-                border: const OutlineInputBorder(),
-              ),
-            ),
-          ),
-        );
     }
-  }
-
-  Widget _buildImagePlaceholder() {
-    return Container(
-      color: Colors.grey[200],
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.image, size: 50.0, color: Colors.grey[400]),
-            const SizedBox(height: 8),
-            Text(
-              'Click to select image',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildLayersPanel() {
@@ -769,11 +553,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                   },
                 ),
               ),
-              // Duplicate button
-              IconButton(
-                icon: const Icon(Icons.copy, size: 16),
-                onPressed: () => _duplicateItem(actualIndex),
-              ),
             ],
           ),
           onTap: () {
@@ -878,62 +657,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           _buildColorPicker('Background Color', 'backgroundColor', item),
           const SizedBox(height: 8),
           _buildColorPicker('Text Color', 'textColor', item),
-        ];
-
-      case WidgetType.image:
-        return [
-          ElevatedButton.icon(
-            onPressed: () => _selectImage(item),
-            icon: const Icon(Icons.image),
-            label: const Text('Select Image'),
-          ),
-          if (item.properties['imagePath'] != null) ...[
-            const SizedBox(height: 8),
-            Text('Current: ${item.properties['imagePath'].split('/').last}'),
-          ],
-        ];
-
-      case WidgetType.container:
-        return [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Container Text',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) => _updateItemProperty(item, 'text', value),
-          ),
-          const SizedBox(height: 16),
-          _buildColorPicker('Background Color', 'backgroundColor', item),
-          const SizedBox(height: 8),
-          _buildColorPicker('Text Color', 'textColor', item),
-        ];
-
-      case WidgetType.card:
-        return [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Card Text',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) => _updateItemProperty(item, 'text', value),
-          ),
-          const SizedBox(height: 16),
-          _buildElevationSlider(item),
-          _buildColorPicker('Background Color', 'backgroundColor', item),
-          const SizedBox(height: 8),
-          _buildColorPicker('Text Color', 'textColor', item),
-        ];
-
-      case WidgetType.input:
-        return [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Placeholder Text',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) =>
-                _updateItemProperty(item, 'placeholder', value),
-          ),
         ];
     }
   }
@@ -1049,18 +772,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  void _selectImage(LayeredCanvasItem item) {
-    showDialog(
-      context: context,
-      builder: (context) => FileExplorerDialog(
-        projectId: widget.project.id,
-        onFileSelected: (filePath) {
-          _updateItemProperty(item, 'imagePath', filePath);
-        },
-      ),
-    );
-  }
-
   void _updateItemProperty(LayeredCanvasItem item, String key, dynamic value) {
     setState(() {
       final itemIndex = currentPage.canvasItems.indexOf(item);
@@ -1125,26 +836,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
               _updateItemProperty(item, 'isItalic', value ?? false),
         ),
         const Text('Italic'),
-      ],
-    );
-  }
-
-  Widget _buildElevationSlider(LayeredCanvasItem item) {
-    final elevation = item.properties['elevation'] as double? ?? 2.0;
-    return Row(
-      children: [
-        const Text('Elevation:'),
-        Expanded(
-          child: Slider(
-            value: elevation,
-            min: 0.0,
-            max: 24.0,
-            divisions: 24,
-            label: elevation.toString(),
-            onChanged: (value) => _updateItemProperty(item, 'elevation', value),
-          ),
-        ),
-        Text(elevation.toString()),
       ],
     );
   }
@@ -1443,14 +1134,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         return Icons.text_fields;
       case WidgetType.button:
         return Icons.smart_button;
-      case WidgetType.image:
-        return Icons.image;
-      case WidgetType.container:
-        return Icons.crop_square;
-      case WidgetType.card:
-        return Icons.credit_card;
-      case WidgetType.input:
-        return Icons.input;
       case WidgetType.polygon:
         return Icons.polyline;
     }
