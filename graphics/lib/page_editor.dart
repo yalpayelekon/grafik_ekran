@@ -26,40 +26,26 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   static const Uuid _uuid = Uuid();
 
   int? creatingPolygonIndex;
-  Offset? mousePosition;
-  late TransformationController transformationController;
-  double _scale = 1.0;
 
   @override
   void initState() {
     super.initState();
     currentPage = widget.page;
-    transformationController = TransformationController();
   }
 
   @override
   void dispose() {
     textController.dispose();
-    transformationController.dispose();
     super.dispose();
   }
 
-  void _addCanvasItem(WidgetType type) {
-    Offset newPosition = const Offset(300, 200);
+  void _addCanvasItem(WidgetType type, Offset position) {
+    Offset newPosition = position;
 
-    if (type == WidgetType.polygon) {
-      final existingPolygons = currentPage.canvasItems
-          .where((item) => item.type == WidgetType.polygon)
-          .toList();
-
-      if (existingPolygons.isNotEmpty) {
-        final offset = existingPolygons.length;
-        final x = 300 + (offset % 3) * 160.0; // 3 polygons per row
-        final y = 200 + (offset ~/ 3) * 120.0; // New row every 3 polygons
-
-        newPosition = Offset(x, y);
-      }
-    }
+    newPosition = Offset(
+      newPosition.dx.clamp(0.0, currentPage.pageSize.width - 150),
+      newPosition.dy.clamp(0.0, currentPage.pageSize.height - 100),
+    );
 
     final newItem = LayeredCanvasItem(
       id: _uuid.v4(),
@@ -267,37 +253,39 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   }
 
   Widget _buildCanvas() {
-    return InteractiveViewer(
-      transformationController: transformationController,
-      boundaryMargin: const EdgeInsets.all(100),
-      minScale: 0.1,
-      maxScale: 3.0,
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.grey[100],
-        child: Center(
-          child: GestureDetector(
-            onTapDown: (details) {
-              if (creatingPolygonIndex != null) {
-                _handleCanvasTap(details.localPosition);
-              }
-            },
-            child: Container(
-              width: currentPage.pageSize.width,
-              height: currentPage.pageSize.height,
-              decoration: BoxDecoration(
-                color: currentPage.backgroundColor,
-                border: Border.all(color: Colors.black, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    spreadRadius: 2,
-                    blurRadius: 8,
-                    offset: const Offset(4, 4),
-                  ),
-                ],
-              ),
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.grey[100],
+      child: Center(
+        child: DragTarget<WidgetType>(
+          onAcceptWithDetails: (details) {
+            final box = context.findRenderObject() as RenderBox;
+            final localPos = box.globalToLocal(details.offset);
+            _addCanvasItem(details.data, localPos);
+          },
+          builder: (context, candidate, rejected) {
+            return GestureDetector(
+              onTapDown: (details) {
+                if (creatingPolygonIndex != null) {
+                  _handleCanvasTap(details.localPosition);
+                }
+              },
+              child: Container(
+                width: currentPage.pageSize.width,
+                height: currentPage.pageSize.height,
+                decoration: BoxDecoration(
+                  color: currentPage.backgroundColor,
+                  border: Border.all(color: Colors.black, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(4, 4),
+                    ),
+                  ],
+                ),
               child: Stack(
                 children: [
                   CustomPaint(
@@ -328,8 +316,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                   })(),
                 ],
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -510,25 +498,41 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   }
 
   Widget _buildDraggable(String label, IconData icon, WidgetType type) {
+    final content = Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.blue[600]),
+          const SizedBox(width: 8.0),
+          Text(label),
+        ],
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8.0),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8.0),
-        elevation: 2,
-        child: InkWell(
-          onTap: () => _addCanvasItem(type),
+      child: Draggable<WidgetType>(
+        data: type,
+        feedback: Material(
+          color: Colors.white.withOpacity(0.8),
+          elevation: 2,
           borderRadius: BorderRadius.circular(8.0),
-          child: Container(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Icon(icon, color: Colors.blue[600]),
-                const SizedBox(width: 8.0),
-                Text(label),
-              ],
-            ),
+          child: content,
+        ),
+        childWhenDragging: Opacity(
+          opacity: 0.5,
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8.0),
+            elevation: 2,
+            child: content,
           ),
+        ),
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8.0),
+          elevation: 2,
+          child: content,
         ),
       ),
     );
@@ -552,7 +556,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                 'Layer: ${currentPage.canvasItems[selectedItemIndex!].zIndex}',
               ),
             ],
-            Text('Zoom: ${(_scale * 100).toInt()}%'),
           ],
         ),
       ),
