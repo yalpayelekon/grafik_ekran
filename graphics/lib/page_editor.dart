@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'project_models.dart';
 import 'project_manager.dart';
 import 'file_explorer.dart';
+import 'dart:math' as math;
 
 class PageEditorScreen extends StatefulWidget {
   final Project project;
@@ -27,7 +28,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   bool isLayersPanelExpanded = false;
   static const Uuid _uuid = Uuid();
 
-  // Canvas transform for zoom and pan
+  int? creatingPolygonIndex;
+  Offset? mousePosition;
   late TransformationController transformationController;
   double _scale = 1.0;
 
@@ -43,6 +45,79 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     textController.dispose();
     transformationController.dispose();
     super.dispose();
+  }
+
+  void _handleCanvasTap(Offset globalPosition) {
+    if (creatingPolygonIndex == null) return;
+
+    final item = currentPage.canvasItems[creatingPolygonIndex!];
+    if (item.type != WidgetType.polygon || !item.properties['isCreating'])
+      return;
+
+    // Convert global position to local canvas position
+    final RenderBox canvasBox = context.findRenderObject() as RenderBox;
+    final localPosition = canvasBox.globalToLocal(globalPosition);
+
+    // Add point to polygon
+    final points = List<Map<String, double>>.from(
+      item.properties['points'] ?? [],
+    );
+    points.add({'dx': localPosition.dx, 'dy': localPosition.dy});
+
+    _updateItemProperty(item, 'points', points);
+  }
+
+  // Finish polygon creation
+  void _finishPolygon(LayeredCanvasItem item) {
+    final points = List<Map<String, double>>.from(
+      item.properties['points'] ?? [],
+    );
+
+    if (points.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Polygon needs at least 3 points')),
+      );
+      return;
+    }
+
+    _updateItemProperty(item, 'isCreating', false);
+    setState(() {
+      creatingPolygonIndex = null;
+    });
+  }
+
+  // Handle polygon point dragging
+  void _updatePolygonPoint(
+    LayeredCanvasItem item,
+    int pointIndex,
+    Offset newPosition,
+  ) {
+    final points = List<Map<String, double>>.from(
+      item.properties['points'] ?? [],
+    );
+    if (pointIndex >= 0 && pointIndex < points.length) {
+      points[pointIndex] = {'dx': newPosition.dx, 'dy': newPosition.dy};
+      _updateItemProperty(item, 'points', points);
+    }
+  }
+
+  // Get polygon bounds for hit testing
+  Rect _getPolygonBounds(List<Map<String, double>> points) {
+    if (points.isEmpty) return Rect.zero;
+
+    double minX = points.first['dx']!;
+    double maxX = points.first['dx']!;
+    double minY = points.first['dy']!;
+    double maxY = points.first['dy']!;
+
+    for (final point in points) {
+      minX = math.min(minX, point['dx']!);
+      maxX = math.max(maxX, point['dx']!);
+      minY = math.min(minY, point['dy']!);
+      maxY = math.max(maxY, point['dy']!);
+    }
+
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
   Future<void> _savePage() async {
@@ -75,6 +150,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         return 'Card';
       case WidgetType.input:
         return 'Input';
+      case WidgetType.polygon:
+        return 'Polygon';
     }
   }
 
@@ -88,7 +165,14 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           'isItalic': false,
           'color': Colors.black,
         };
-
+      case WidgetType.polygon:
+        return {
+          'points': <Map<String, double>>[], // List of points as {dx: x, dy: y}
+          'isCreating': true, // Whether we're still in creation mode
+          'strokeColor': Colors.blue,
+          'fillColor': Colors.blue.withOpacity(0.3),
+          'strokeWidth': 2.0,
+        };
       case WidgetType.button:
         return {
           'text': 'Button',
@@ -126,7 +210,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       position: const Offset(300, 200),
       size: const Size(150, 100),
       properties: _getDefaultPropertiesForType(type),
-      zIndex: currentPage.canvasItems.length, // New items on top
+      zIndex: currentPage.canvasItems.length,
     );
 
     setState(() {
@@ -135,6 +219,10 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       );
       selectedItemIndex = currentPage.canvasItems.length - 1;
       isPanelExpanded = true;
+
+      if (type == WidgetType.polygon) {
+        creatingPolygonIndex = selectedItemIndex;
+      }
 
       if (type == WidgetType.text) {
         textController.text = newItem.properties['text'] as String;
@@ -291,6 +379,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           _buildDraggable('Container', Icons.crop_square, WidgetType.container),
           _buildDraggable('Card', Icons.credit_card, WidgetType.card),
           _buildDraggable('Input', Icons.input, WidgetType.input),
+          _buildDraggable('Polygon', Icons.polyline, WidgetType.polygon),
         ],
       ),
     );
@@ -332,55 +421,66 @@ class PageEditorScreenState extends State<PageEditorScreen> {
   }
 
   Widget _buildCanvas() {
-    return InteractiveViewer(
-      transformationController: transformationController,
-      boundaryMargin: const EdgeInsets.all(100),
-      minScale: 0.1,
-      maxScale: 3.0,
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.grey[100],
-        child: Center(
-          child: Container(
-            width: currentPage.pageSize.width,
-            height: currentPage.pageSize.height,
-            decoration: BoxDecoration(
-              color: currentPage.backgroundColor,
-              border: Border.all(color: Colors.black, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  spreadRadius: 2,
-                  blurRadius: 8,
-                  offset: const Offset(4, 4),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Grid pattern
-                CustomPaint(painter: GridPainter(), size: currentPage.pageSize),
+    return GestureDetector(
+      onTapDown: (details) {
+        // Handle polygon point creation
+        if (creatingPolygonIndex != null) {
+          _handleCanvasTap(details.globalPosition);
+        }
+      },
+      child: InteractiveViewer(
+        transformationController: transformationController,
+        boundaryMargin: const EdgeInsets.all(100),
+        minScale: 0.1,
+        maxScale: 3.0,
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.grey[100],
+          child: Center(
+            child: Container(
+              width: currentPage.pageSize.width,
+              height: currentPage.pageSize.height,
+              decoration: BoxDecoration(
+                color: currentPage.backgroundColor,
+                border: Border.all(color: Colors.black, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    spreadRadius: 2,
+                    blurRadius: 8,
+                    offset: const Offset(4, 4),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  // Grid pattern
+                  CustomPaint(
+                    painter: GridPainter(),
+                    size: currentPage.pageSize,
+                  ),
 
-                ...(() {
-                  final entries = currentPage.canvasItems
-                      .asMap()
-                      .entries
-                      .toList();
-                  entries.sort(
-                    (a, b) => a.value.zIndex.compareTo(b.value.zIndex),
-                  );
-                  return entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    return Positioned(
-                      left: item.position.dx,
-                      top: item.position.dy,
-                      child: _buildResizableWidget(index, item),
+                  ...(() {
+                    final entries = currentPage.canvasItems
+                        .asMap()
+                        .entries
+                        .toList();
+                    entries.sort(
+                      (a, b) => a.value.zIndex.compareTo(b.value.zIndex),
                     );
-                  }).toList();
-                })(),
-              ],
+                    return entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      return Positioned(
+                        left: item.position.dx,
+                        top: item.position.dy,
+                        child: _buildResizableWidget(index, item),
+                      );
+                    }).toList();
+                  })(),
+                ],
+              ),
             ),
           ),
         ),
@@ -413,19 +513,35 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  void _moveItemToLayer(int itemIndex, int newZIndex) {
-    if (itemIndex < currentPage.canvasItems.length) {
-      setState(() {
-        final updatedItems = List<LayeredCanvasItem>.from(
-          currentPage.canvasItems,
-        );
-        updatedItems[itemIndex] = updatedItems[itemIndex].copyWith(
-          zIndex: newZIndex,
-        );
+  Widget _buildPolygonWidget(LayeredCanvasItem item) {
+    final points = List<Map<String, double>>.from(
+      item.properties['points'] ?? [],
+    );
+    final isCreating = item.properties['isCreating'] as bool? ?? false;
+    final strokeColor =
+        _parseColor(item.properties['strokeColor']) ?? Colors.blue;
+    final fillColor =
+        _parseColor(item.properties['fillColor']) ??
+        Colors.blue.withOpacity(0.3);
+    final strokeWidth = item.properties['strokeWidth'] as double? ?? 2.0;
 
-        currentPage = currentPage.copyWith(canvasItems: updatedItems);
-      });
-    }
+    return CustomPaint(
+      painter: PolygonPainter(
+        points: points,
+        strokeColor: strokeColor,
+        fillColor: fillColor,
+        strokeWidth: strokeWidth,
+        isCreating: isCreating,
+      ),
+      child: Container(),
+    );
+  }
+
+  Color? _parseColor(dynamic colorValue) {
+    if (colorValue == null) return null;
+    if (colorValue is Color) return colorValue;
+    if (colorValue is int) return Color(colorValue);
+    return null;
   }
 
   Widget _buildWidgetForType(LayeredCanvasItem item) {
@@ -448,7 +564,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
             ),
           ),
         );
-
+      case WidgetType.polygon:
+        return _buildPolygonWidget(item);
       case WidgetType.button:
         return Center(
           child: ElevatedButton(
@@ -728,6 +845,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
 
   List<Widget> _buildPropertiesForType(LayeredCanvasItem item) {
     switch (item.type) {
+      case WidgetType.polygon:
+        return _buildPolygonProperties(item);
       case WidgetType.text:
         return [
           TextField(
@@ -1318,7 +1437,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // Utility methods
   IconData _getIconForType(WidgetType type) {
     switch (type) {
       case WidgetType.text:
@@ -1333,12 +1451,142 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         return Icons.credit_card;
       case WidgetType.input:
         return Icons.input;
+      case WidgetType.polygon:
+        return Icons.polyline;
     }
   }
 
+  List<Widget> _buildPolygonProperties(LayeredCanvasItem item) {
+    final isCreating = item.properties['isCreating'] as bool? ?? false;
+    final points = List<Map<String, double>>.from(
+      item.properties['points'] ?? [],
+    );
+
+    return [
+      // Creation controls
+      if (isCreating) ...[
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'Creating Polygon',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text('Points: ${points.length}'),
+              const SizedBox(height: 8),
+              const Text(
+                'Click on canvas to add points',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: points.length >= 3
+                    ? () => _finishPolygon(item)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Finish Polygon'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ] else ...[
+        // Completed polygon info
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'Polygon Complete',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text('Points: ${points.length}'),
+              const SizedBox(height: 8),
+              const Text(
+                'Drag points to edit shape',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+
+      // Style properties
+      const Text(
+        'Stroke Properties',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      _buildColorPicker('Stroke Color', 'strokeColor', item),
+      const SizedBox(height: 16),
+      _buildStrokeWidthSlider(item),
+      const SizedBox(height: 16),
+
+      const Text(
+        'Fill Properties',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      _buildColorPicker('Fill Color', 'fillColor', item),
+    ];
+  }
+
+  // Add this method for stroke width control
+  Widget _buildStrokeWidthSlider(LayeredCanvasItem item) {
+    final strokeWidth = item.properties['strokeWidth'] as double? ?? 2.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Stroke Width'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Slider(
+                value: strokeWidth,
+                min: 1.0,
+                max: 10.0,
+                divisions: 9,
+                label: strokeWidth.toString(),
+                onChanged: (value) =>
+                    _updateItemProperty(item, 'strokeWidth', value),
+              ),
+            ),
+            Text(strokeWidth.toInt().toString()),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Update _buildResizableWidget method to handle polygons specially
   Widget _buildResizableWidget(int index, LayeredCanvasItem item) {
     final isSelected = selectedItemIndex == index;
 
+    // Special handling for polygons
+    if (item.type == WidgetType.polygon) {
+      return _buildPolygonResizableWidget(index, item, isSelected);
+    }
+
+    // Existing logic for other widget types...
     return Opacity(
       opacity: item.opacity,
       child: GestureDetector(
@@ -1392,8 +1640,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                 child: _buildWidgetForType(item),
               ),
 
-              // Resize handle (only when selected)
-              if (isSelected)
+              // Resize handle (only when selected and not polygon)
+              if (isSelected && item.type != WidgetType.polygon)
                 Positioned(
                   right: 0,
                   bottom: 0,
@@ -1462,6 +1710,94 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       ),
     );
   }
+
+  // Add this new method for polygon-specific resizable widget
+  Widget _buildPolygonResizableWidget(
+    int index,
+    LayeredCanvasItem item,
+    bool isSelected,
+  ) {
+    final points = List<Map<String, double>>.from(
+      item.properties['points'] ?? [],
+    );
+    final isCreating = item.properties['isCreating'] as bool? ?? false;
+
+    return Opacity(
+      opacity: item.opacity,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            selectedItemIndex = index;
+            isPanelExpanded = true;
+          });
+        },
+        child: Stack(
+          children: [
+            // Polygon widget
+            SizedBox(
+              width: item.size.width,
+              height: item.size.height,
+              child: _buildWidgetForType(item),
+            ),
+
+            // Point editing handles (when selected and not creating)
+            if (isSelected && !isCreating)
+              ...points.asMap().entries.map((entry) {
+                final pointIndex = entry.key;
+                final point = entry.value;
+
+                return Positioned(
+                  left: point['dx']! - 6,
+                  top: point['dy']! - 6,
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      final newPosition = Offset(
+                        point['dx']! + details.delta.dx,
+                        point['dy']! + details.delta.dy,
+                      );
+                      _updatePolygonPoint(item, pointIndex, newPosition);
+                    },
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+
+            // Z-index indicator
+            if (isSelected)
+              Positioned(
+                left: 0,
+                top: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.only(
+                      bottomRight: Radius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Layer ${item.zIndex}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class GridPainter extends CustomPainter {
@@ -1483,4 +1819,68 @@ class GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class PolygonPainter extends CustomPainter {
+  final List<Map<String, double>> points;
+  final Color strokeColor;
+  final Color fillColor;
+  final double strokeWidth;
+  final bool isCreating;
+
+  PolygonPainter({
+    required this.points,
+    required this.strokeColor,
+    required this.fillColor,
+    required this.strokeWidth,
+    required this.isCreating,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+
+    final paint = Paint()
+      ..color = strokeColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final fillPaint = Paint()
+      ..color = fillColor
+      ..style = PaintingStyle.fill;
+
+    // Convert points to Offset list
+    final offsetPoints = points.map((p) => Offset(p['dx']!, p['dy']!)).toList();
+
+    if (offsetPoints.length >= 2) {
+      final path = Path();
+      path.moveTo(offsetPoints.first.dx, offsetPoints.first.dy);
+
+      for (int i = 1; i < offsetPoints.length; i++) {
+        path.lineTo(offsetPoints[i].dx, offsetPoints[i].dy);
+      }
+
+      // Close the path if not creating (completed polygon)
+      if (!isCreating && offsetPoints.length >= 3) {
+        path.close();
+        // Fill the polygon
+        canvas.drawPath(path, fillPaint);
+      }
+
+      // Draw the stroke
+      canvas.drawPath(path, paint);
+    }
+
+    // Draw points as small circles
+    final pointPaint = Paint()
+      ..color = strokeColor
+      ..style = PaintingStyle.fill;
+
+    for (final point in offsetPoints) {
+      canvas.drawCircle(point, 4.0, pointPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

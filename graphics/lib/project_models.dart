@@ -269,7 +269,7 @@ class LayeredCanvasItem {
 }
 
 // Widget Types
-enum WidgetType { text, button, image, container, card, input }
+enum WidgetType { text, button, image, container, card, input, polygon }
 
 // File System Item for File Explorer
 class FileSystemItem {
