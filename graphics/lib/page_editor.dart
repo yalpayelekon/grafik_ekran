@@ -286,35 +286,36 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                     ),
                   ],
                 ),
-              child: Stack(
-                children: [
-                  CustomPaint(
-                    painter: GridPainter(),
-                    size: currentPage.pageSize,
-                  ),
+                child: Stack(
+                  children: [
+                    CustomPaint(
+                      painter: GridPainter(),
+                      size: currentPage.pageSize,
+                    ),
 
-                  if (creatingPolygonIndex != null)
-                    _buildPolygonCreationHelper(),
+                    if (creatingPolygonIndex != null)
+                      _buildPolygonCreationHelper(),
 
-                  ...(() {
-                    final entries = currentPage.canvasItems
-                        .asMap()
-                        .entries
-                        .toList();
-                    entries.sort(
-                      (a, b) => a.value.zIndex.compareTo(b.value.zIndex),
-                    );
-                    return entries.map((entry) {
-                      final index = entry.key;
-                      final item = entry.value;
-                      return Positioned(
-                        left: item.position.dx,
-                        top: item.position.dy,
-                        child: _buildResizableWidget(index, item),
+                    ...(() {
+                      final entries = currentPage.canvasItems
+                          .asMap()
+                          .entries
+                          .toList();
+                      entries.sort(
+                        (a, b) => a.value.zIndex.compareTo(b.value.zIndex),
                       );
-                    }).toList();
-                  })(),
-                ],
+                      return entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        return Positioned(
+                          left: item.position.dx,
+                          top: item.position.dy,
+                          child: _buildResizableWidget(index, item),
+                        );
+                      }).toList();
+                    })(),
+                  ],
+                ),
               ),
             );
           },
