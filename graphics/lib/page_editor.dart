@@ -44,8 +44,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     super.dispose();
   }
 
-  // Replace your _handleCanvasTap method with this debugging version
-
   void _handleCanvasTap(Offset globalPosition) {
     print('=== POLYGON CLICK DEBUG ===');
     print('creatingPolygonIndex: $creatingPolygonIndex');
@@ -66,7 +64,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
 
     print('Global click position: $globalPosition');
 
-    // Check if we can find the page container
     final pageContext = _pageContainerKey.currentContext;
     print('Page context found: ${pageContext != null}');
 
@@ -83,7 +80,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       return;
     }
 
-    // Get page box position and size
     final pageBoxOffset = pageBox.localToGlobal(Offset.zero);
     final pageBoxSize = pageBox.size;
     print('Page box global offset: $pageBoxOffset');
@@ -121,8 +117,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     print('=== END DEBUG ===');
   }
 
-  // Replace the _finishPolygon method in your PageEditorScreen
-
   void _finishPolygon(LayeredCanvasItem item) {
     final points = List<Map<String, double>>.from(
       item.properties['points'] ?? [],
@@ -135,7 +129,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       return;
     }
 
-    // Update the item properties and force setState
     setState(() {
       final itemIndex = currentPage.canvasItems.indexOf(item);
       if (itemIndex != -1) {
@@ -347,7 +340,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // 1. Use the alternative canvas approach (this solves the position issue)
   Widget _buildCanvas() {
     return InteractiveViewer(
       transformationController: transformationController,
@@ -361,7 +353,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         child: Center(
           child: GestureDetector(
             onTapDown: (details) {
-              // Use the local position from the gesture detector
               if (creatingPolygonIndex != null) {
                 _handleCanvasTap(details.localPosition);
               }
@@ -384,7 +375,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
               ),
               child: Stack(
                 children: [
-                  // Grid pattern
                   CustomPaint(
                     painter: GridPainter(),
                     size: currentPage.pageSize,
@@ -401,6 +391,15 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                     return entries.map((entry) {
                       final index = entry.key;
                       final item = entry.value;
+
+                      if (item.type == WidgetType.polygon) {
+                        return _buildPolygonResizableWidget(
+                          index,
+                          item,
+                          selectedItemIndex == index,
+                        );
+                      }
+
                       return Positioned(
                         left: item.position.dx,
                         top: item.position.dy,
@@ -445,7 +444,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     });
   }
 
-  // 4. Fix the polygon widget to ensure it covers the full canvas area
   Widget _buildPolygonResizableWidget(
     int index,
     LayeredCanvasItem item,
@@ -465,13 +463,11 @@ class PageEditorScreenState extends State<PageEditorScreen> {
             isPanelExpanded = true;
           });
         },
-        child: Container(
-          // Make sure the polygon widget covers the entire page for proper rendering
+        child: SizedBox(
           width: currentPage.pageSize.width,
           height: currentPage.pageSize.height,
           child: Stack(
             children: [
-              // Polygon widget - now covers full area
               CustomPaint(
                 painter: PolygonPainter(
                   points: points,
@@ -487,7 +483,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                 size: currentPage.pageSize, // Use full page size
               ),
 
-              // Point editing handles (when selected and not creating)
               if (isSelected && !isCreating)
                 ...points.asMap().entries.map((entry) {
                   final pointIndex = entry.key;
@@ -515,9 +510,8 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                       ),
                     ),
                   );
-                }).toList(),
+                }),
 
-              // Z-index indicator
               if (isSelected)
                 Positioned(
                   left: 10,
@@ -543,38 +537,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         ),
       ),
     );
-  }
-
-  void _handleCanvasTapAlternative(Offset localPosition) {
-    print('=== ALTERNATIVE CLICK DEBUG ===');
-    print('Local position from gesture: $localPosition');
-    print('Page size: ${currentPage.pageSize}');
-
-    if (creatingPolygonIndex == null) return;
-
-    final item = currentPage.canvasItems[creatingPolygonIndex!];
-    if (item.type != WidgetType.polygon || !item.properties['isCreating'])
-      return;
-
-    // Check bounds
-    if (localPosition.dx < 0 ||
-        localPosition.dy < 0 ||
-        localPosition.dx > currentPage.pageSize.width ||
-        localPosition.dy > currentPage.pageSize.height) {
-      print('Click outside bounds: $localPosition');
-      return;
-    }
-
-    // Add point to polygon
-    final points = List<Map<String, double>>.from(
-      item.properties['points'] ?? [],
-    );
-    points.add({'dx': localPosition.dx, 'dy': localPosition.dy});
-
-    print('Adding point at: $localPosition');
-    print('Total points: ${points.length}');
-
-    _updateItemProperty(item, 'points', points);
   }
 
   Widget _buildStatusBar() {
@@ -1248,7 +1210,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     ];
   }
 
-  // Add this method for stroke width control
   Widget _buildStrokeWidthSlider(LayeredCanvasItem item) {
     final strokeWidth = item.properties['strokeWidth'] as double? ?? 2.0;
 
@@ -1277,22 +1238,13 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // Update your _buildResizableWidget method to handle polygons differently
-
   Widget _buildResizableWidget(int index, LayeredCanvasItem item) {
     final isSelected = selectedItemIndex == index;
 
-    // Special handling for polygons - they need to cover the full canvas
     if (item.type == WidgetType.polygon) {
-      return Positioned(
-        left:
-            0, // Always position at 0,0 since polygon coordinates are absolute
-        top: 0, // Always position at 0,0 since polygon coordinates are absolute
-        child: _buildPolygonResizableWidget(index, item, isSelected),
-      );
+      return Container(); // Return empty container - shouldn't be called for polygons
     }
 
-    // Existing logic for other widget types...
     return Opacity(
       opacity: item.opacity,
       child: GestureDetector(
@@ -1346,7 +1298,7 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                 child: _buildWidgetForType(item),
               ),
 
-              // Resize handle (only when selected and not polygon)
+              // Resize handle (only when selected)
               if (isSelected)
                 Positioned(
                   right: 0,
