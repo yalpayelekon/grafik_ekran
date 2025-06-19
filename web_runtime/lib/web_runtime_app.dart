@@ -78,7 +78,9 @@ class WebRuntimeHomeState extends State<WebRuntimeHome> {
     try {
       final project = await WebRuntimeService.loadProject(projectId);
       if (project != null) {
+        final projects = WebRuntimeService.getAvailableProjects();
         setState(() {
+          availableProjects = projects;
           currentProject = project;
           navigationState = NavigationState(currentProjectId: projectId);
         });
