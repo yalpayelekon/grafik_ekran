@@ -55,10 +55,8 @@ class WebRuntimeHomeState extends State<WebRuntimeHome> {
       // Get available projects
       availableProjects = WebRuntimeService.getAvailableProjects();
 
-      // If no projects, create demo
       if (availableProjects.isEmpty) {
-        await WebRuntimeService.createDemoProject();
-        availableProjects = WebRuntimeService.getAvailableProjects();
+        return;
       }
 
       // Load first project if available
@@ -808,12 +806,6 @@ class DevToolsDialogState extends State<DevToolsDialog> {
             'Demo Data',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: _createDemoData,
-            icon: const Icon(Icons.web),
-            label: const Text('Create Demo Project'),
-          ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _clearAllData,
@@ -937,21 +929,6 @@ class DevToolsDialogState extends State<DevToolsDialog> {
         reader.readAsText(file);
       }
     });
-  }
-
-  void _createDemoData() async {
-    try {
-      await WebRuntimeService.createDemoProject();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Demo project created successfully!')),
-      );
-      Navigator.pop(context);
-      widget.onProjectChanged('demo-project-1');
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to create demo: $e')));
-    }
   }
 
   void _clearAllData() {
