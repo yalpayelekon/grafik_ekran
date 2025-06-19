@@ -172,6 +172,8 @@ class LayeredCanvasItem {
       'backgroundColor',
       'textColor',
       'borderColor',
+      'strokeColor',
+      'fillColor',
       // Add more color property keys as needed
     ];
 
@@ -194,6 +196,8 @@ class LayeredCanvasItem {
       'backgroundColor',
       'textColor',
       'borderColor',
+      'strokeColor',
+      'fillColor',
       // Add more color property keys as needed
     ];
 
