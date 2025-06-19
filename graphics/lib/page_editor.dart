@@ -44,20 +44,15 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     super.dispose();
   }
 
-  // FIX 1: Update _addCanvasItem to create polygons at different positions
-  // FIX 1: Update _addCanvasItem to create polygons at different positions
   void _addCanvasItem(WidgetType type) {
-    // Calculate position to avoid overlapping
     Offset newPosition = const Offset(300, 200);
 
     if (type == WidgetType.polygon) {
-      // For polygons, calculate a position that doesn't overlap with existing polygons
       final existingPolygons = currentPage.canvasItems
           .where((item) => item.type == WidgetType.polygon)
           .toList();
 
       if (existingPolygons.isNotEmpty) {
-        // Offset each new polygon by 160 pixels to the right, wrapping to next row
         final offset = existingPolygons.length;
         final x = 300 + (offset % 3) * 160.0; // 3 polygons per row
         final y = 200 + (offset ~/ 3) * 120.0; // New row every 3 polygons
@@ -93,7 +88,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     });
   }
 
-  // FIX 2: Update debugPolygonState to show correct polygon info
   void debugPolygonState() {
     if (creatingPolygonIndex != null &&
         creatingPolygonIndex! < currentPage.canvasItems.length) {
@@ -114,7 +108,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     }
   }
 
-  // FIX 3: Update _buildPolygonCreationHelper to show the correct polygon
   Widget _buildPolygonCreationHelper() {
     if (creatingPolygonIndex == null ||
         creatingPolygonIndex! >= currentPage.canvasItems.length) {
@@ -156,7 +149,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // FIX 4: Enhanced _handleCanvasTap with better validation
   void _handleCanvasTap(Offset localCanvasPosition) {
     if (creatingPolygonIndex == null ||
         creatingPolygonIndex! >= currentPage.canvasItems.length) {
@@ -169,18 +161,15 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       return;
     }
 
-    // Convert canvas coordinates to polygon-relative coordinates
     final relativePosition = Offset(
       localCanvasPosition.dx - item.position.dx,
       localCanvasPosition.dy - item.position.dy,
     );
 
-    // Check if click is within the polygon's bounds
     if (relativePosition.dx < 0 ||
         relativePosition.dx > item.size.width ||
         relativePosition.dy < 0 ||
         relativePosition.dy > item.size.height) {
-      // Show a message that click should be within polygon bounds
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -192,7 +181,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
       return;
     }
 
-    // Add point relative to polygon container
     final points = List<Map<String, double>>.from(
       item.properties['points'] ?? [],
     );
@@ -204,11 +192,9 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
     _updateItemProperty(item, 'points', points);
 
-    // Call debug after update
     debugPolygonState();
   }
 
-  // FIX 5: Enhanced _finishPolygon method
   void _finishPolygon(LayeredCanvasItem item) {
     final points = List<Map<String, double>>.from(
       item.properties['points'] ?? [],
@@ -223,7 +209,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
 
     print('Finishing polygon ${item.id} with ${points.length} points');
 
-    // Update the item to mark it as finished
     setState(() {
       final itemIndex = currentPage.canvasItems.indexWhere(
         (i) => i.id == item.id,
@@ -238,7 +223,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         updatedItems[itemIndex] = item.copyWith(properties: updatedProperties);
         currentPage = currentPage.copyWith(canvasItems: updatedItems);
 
-        // Clear creation state
         creatingPolygonIndex = null;
 
         print('Polygon ${item.id} finished successfully');
@@ -246,7 +230,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           'Creation state cleared. creatingPolygonIndex = $creatingPolygonIndex',
         );
 
-        // Keep the finished polygon selected
         selectedItemIndex = itemIndex;
       }
     });
@@ -283,7 +266,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     });
   }
 
-  // 4. Update the canvas build method
   Widget _buildCanvas() {
     return InteractiveViewer(
       transformationController: transformationController,
@@ -318,13 +300,11 @@ class PageEditorScreenState extends State<PageEditorScreen> {
               ),
               child: Stack(
                 children: [
-                  // Grid pattern
                   CustomPaint(
                     painter: GridPainter(),
                     size: currentPage.pageSize,
                   ),
 
-                  // Show polygon creation area when creating
                   if (creatingPolygonIndex != null)
                     _buildPolygonCreationHelper(),
 
@@ -369,7 +349,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
 
     return Stack(
       children: [
-        // Show container bounds when creating
         if (isCreating)
           Container(
             width: item.size.width,
@@ -380,7 +359,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
             ),
           ),
 
-        // The actual polygon
         CustomPaint(
           painter: PolygonPainter(
             points: points,
@@ -614,7 +592,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
         return Center(
           child: ElevatedButton(
             onPressed: () {
-              // Handle navigation if linked
               if (item.linkedPageId != null) {
                 _showNavigationPreview(item.linkedPageId!);
               }
@@ -1204,7 +1181,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     ];
   }
 
-  // Add this method for stroke width control
   Widget _buildStrokeWidthSlider(LayeredCanvasItem item) {
     final strokeWidth = item.properties['strokeWidth'] as double? ?? 2.0;
 
@@ -1233,16 +1209,13 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // Update _buildResizableWidget method to handle polygons specially
   Widget _buildResizableWidget(int index, LayeredCanvasItem item) {
     final isSelected = selectedItemIndex == index;
 
-    // Special handling for polygons
     if (item.type == WidgetType.polygon) {
       return _buildPolygonResizableWidget(index, item, isSelected);
     }
 
-    // Existing logic for other widget types...
     return Opacity(
       opacity: item.opacity,
       child: GestureDetector(
@@ -1289,14 +1262,12 @@ class PageEditorScreenState extends State<PageEditorScreen> {
           ),
           child: Stack(
             children: [
-              // Actual widget
               SizedBox(
                 width: item.size.width,
                 height: item.size.height,
                 child: _buildWidgetForType(item),
               ),
 
-              // Resize handle (only when selected and not polygon)
               if (isSelected && item.type != WidgetType.polygon)
                 Positioned(
                   right: 0,
@@ -1337,7 +1308,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
                   ),
                 ),
 
-              // Z-index indicator
               if (isSelected)
                 Positioned(
                   left: 0,
@@ -1367,7 +1337,6 @@ class PageEditorScreenState extends State<PageEditorScreen> {
     );
   }
 
-  // Add this new method for polygon-specific resizable widget
   Widget _buildPolygonResizableWidget(
     int index,
     LayeredCanvasItem item,
