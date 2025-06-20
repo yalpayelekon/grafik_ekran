@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:html' as html;
-import 'web_runtime_models.dart';
-import 'web_runtime_service.dart';
 
 void main() {
   runApp(const WebRuntimeApp());
@@ -59,10 +57,7 @@ class WebRuntimeHomeState extends State<WebRuntimeHome> {
         return;
       }
 
-      // Load first project if available
-      if (availableProjects.isNotEmpty) {
-        await _loadProject(availableProjects.first);
-      }
+      await _loadProject(availableProjects.first);
     } catch (e) {
       setState(() => errorMessage = 'Failed to initialize app: $e');
     } finally {
@@ -288,8 +283,6 @@ class PageRenderer extends StatefulWidget {
 }
 
 class PageRendererState extends State<PageRenderer> {
-  final Map<String, String> _loadedAssets = {};
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -383,21 +376,6 @@ class PageRendererState extends State<PageRenderer> {
       case WidgetType.image:
         return _buildImageWidget(item);
 
-      case WidgetType.container:
-        return Container(
-          width: item.size.width,
-          height: item.size.height,
-          color: _parseColor(properties['backgroundColor']) ?? Colors.blue[100],
-          alignment: Alignment.center,
-          child: Text(
-            properties['text'] as String? ?? 'Container',
-            style: TextStyle(
-              color: _parseColor(properties['textColor']) ?? Colors.black,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        );
-
       case WidgetType.card:
         return Card(
           elevation: properties['elevation'] as double? ?? 2.0,
@@ -414,24 +392,6 @@ class PageRendererState extends State<PageRenderer> {
               ),
               textAlign: TextAlign.center,
             ),
-          ),
-        );
-
-      case WidgetType.input:
-        return Container(
-          width: item.size.width,
-          height: item.size.height,
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: properties['placeholder'] as String? ?? 'Enter text...',
-              border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-            ),
-            style: const TextStyle(fontSize: 14),
           ),
         );
     }
@@ -960,4 +920,471 @@ class DevToolsDialogState extends State<DevToolsDialog> {
       ),
     );
   }
+}
+
+class WebRuntimeService {
+  static const String _storagePrefix = 'webAppDesigner_';
+
+  // Cache for loaded data
+  static final Map<String, Project> _projectCache = {};
+  static final Map<String, DesignPage> _pageCache = {};
+  static final Map<String, String> _assetCache = {};
+
+  // Load project data from multiple sources
+  static Future<Project?> loadProject(String projectId) async {
+    // Check cache first
+    if (_projectCache.containsKey(projectId)) {
+      return _projectCache[projectId];
+    }
+
+    try {
+      // Try to load from localStorage (if data was uploaded)
+      final projectData =
+          html.window.localStorage['${_storagePrefix}project_$projectId'];
+      if (projectData != null) {
+        final project = Project.fromJson(json.decode(projectData));
+        _projectCache[projectId] = project;
+        return project;
+      }
+
+      // Try to load from assets (if bundled with web app)
+      try {
+        final assetData = await rootBundle.loadString(
+          'assets/projects/$projectId/project.json',
+        );
+        final project = Project.fromJson(json.decode(assetData));
+        _projectCache[projectId] = project;
+        return project;
+      } catch (e) {
+        print('Could not load project from assets: $e');
+      }
+
+      return null;
+    } catch (e) {
+      print('Error loading project $projectId: $e');
+      return null;
+    }
+  }
+
+  // Load page data
+  static Future<DesignPage?> loadPage(String projectId, String pageId) async {
+    final cacheKey = '${projectId}_$pageId';
+
+    // Check cache first
+    if (_pageCache.containsKey(cacheKey)) {
+      return _pageCache[cacheKey];
+    }
+
+    try {
+      // Try localStorage first
+      final pageData = html
+          .window
+          .localStorage['${_storagePrefix}page_${projectId}_$pageId'];
+      if (pageData != null) {
+        final page = DesignPage.fromJson(json.decode(pageData));
+        _pageCache[cacheKey] = page;
+        return page;
+      }
+
+      // Try assets
+      try {
+        final assetData = await rootBundle.loadString(
+          'assets/projects/$projectId/pages/$pageId.json',
+        );
+        final page = DesignPage.fromJson(json.decode(assetData));
+        _pageCache[cacheKey] = page;
+        return page;
+      } catch (e) {
+        print('Could not load page from assets: $e');
+      }
+
+      return null;
+    } catch (e) {
+      print('Error loading page $pageId: $e');
+      return null;
+    }
+  }
+
+  // Load asset (image) data
+  static Future<String?> loadAsset(String projectId, String assetPath) async {
+    final cacheKey = '${projectId}_$assetPath';
+
+    // Check cache first
+    if (_assetCache.containsKey(cacheKey)) {
+      return _assetCache[cacheKey];
+    }
+
+    try {
+      // For web, we'll use base64 encoded images stored in localStorage
+      final assetData =
+          html.window.localStorage['${_storagePrefix}asset_$cacheKey'];
+      if (assetData != null) {
+        _assetCache[cacheKey] = assetData;
+        return assetData;
+      }
+
+      // Try to load from assets folder if bundled
+      try {
+        final fileName = assetPath.split('/').last;
+        final assetUrl = 'assets/projects/$projectId/assets/images/$fileName';
+        _assetCache[cacheKey] = assetUrl;
+        return assetUrl;
+      } catch (e) {
+        print('Could not load asset from assets: $e');
+      }
+
+      return null;
+    } catch (e) {
+      print('Error loading asset $assetPath: $e');
+      return null;
+    }
+  }
+
+  // Get list of available projects
+  static List<String> getAvailableProjects() {
+    final projects = <String>[];
+
+    // Check localStorage for uploaded projects
+    for (final key in html.window.localStorage.keys) {
+      if (key.startsWith('${_storagePrefix}project_')) {
+        final projectId = key.substring('${_storagePrefix}project_'.length);
+        projects.add(projectId);
+      }
+    }
+
+    return projects;
+  }
+
+  // Upload project data from desktop app (for testing/demo)
+  static Future<void> uploadProjectData(
+    Map<String, dynamic> projectData,
+  ) async {
+    try {
+      final projectJson = projectData['project'] as Map<String, dynamic>;
+      final pagesData = projectData['pages'] as Map<String, dynamic>;
+      final assetsData = projectData['assets'] as Map<String, dynamic>?;
+
+      final project = Project.fromJson(projectJson);
+
+      // Store project
+      html.window.localStorage['${_storagePrefix}project_${project.id}'] = json
+          .encode(project.toJson());
+
+      // Store pages
+      for (final entry in pagesData.entries) {
+        final pageId = entry.key;
+        final pageJson = entry.value as Map<String, dynamic>;
+        html
+            .window
+            .localStorage['${_storagePrefix}page_${project.id}_$pageId'] = json
+            .encode(pageJson);
+      }
+
+      // Store assets (base64 encoded)
+      if (assetsData != null) {
+        for (final entry in assetsData.entries) {
+          final assetPath = entry.key;
+          final assetData = entry.value as String;
+          html
+                  .window
+                  .localStorage['${_storagePrefix}asset_${project.id}_$assetPath'] =
+              assetData;
+        }
+      }
+
+      // Clear caches to force reload
+      _projectCache.clear();
+      _pageCache.clear();
+      _assetCache.clear();
+    } catch (e) {
+      print('Error uploading project data: $e');
+      rethrow;
+    }
+  }
+
+  // Clear all data (for testing)
+  static void clearAllData() {
+    final keysToRemove = <String>[];
+    for (final key in html.window.localStorage.keys) {
+      if (key.startsWith(_storagePrefix)) {
+        keysToRemove.add(key);
+      }
+    }
+
+    for (final key in keysToRemove) {
+      html.window.localStorage.remove(key);
+    }
+
+    _projectCache.clear();
+    _pageCache.clear();
+    _assetCache.clear();
+  }
+}
+
+class Project {
+  final String id;
+  final String name;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<String> pageIds;
+  final Size defaultPageSize;
+  final String projectPath;
+
+  Project({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.pageIds,
+    required this.defaultPageSize,
+    required this.projectPath,
+  });
+
+  factory Project.fromJson(Map<String, dynamic> json) {
+    return Project(
+      id: json['id'],
+      name: json['name'],
+      createdAt: DateTime.parse(json['createdAt']),
+      updatedAt: DateTime.parse(json['updatedAt']),
+      pageIds: List<String>.from(json['pageIds'] ?? []),
+      defaultPageSize: Size(
+        json['defaultPageSize']['width'].toDouble(),
+        json['defaultPageSize']['height'].toDouble(),
+      ),
+      projectPath: json['projectPath'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'pageIds': pageIds,
+      'defaultPageSize': {
+        'width': defaultPageSize.width,
+        'height': defaultPageSize.height,
+      },
+      'projectPath': projectPath,
+    };
+  }
+}
+
+class DesignPage {
+  final String id;
+  final String name;
+  final String projectId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final Size pageSize;
+  final List<LayeredCanvasItem> canvasItems;
+  final Color backgroundColor;
+
+  DesignPage({
+    required this.id,
+    required this.name,
+    required this.projectId,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.pageSize,
+    required this.canvasItems,
+    this.backgroundColor = Colors.white,
+  });
+
+  factory DesignPage.fromJson(Map<String, dynamic> json) {
+    return DesignPage(
+      id: json['id'],
+      name: json['name'],
+      projectId: json['projectId'],
+      createdAt: DateTime.parse(json['createdAt']),
+      updatedAt: DateTime.parse(json['updatedAt']),
+      pageSize: Size(
+        json['pageSize']['width'].toDouble(),
+        json['pageSize']['height'].toDouble(),
+      ),
+      canvasItems: (json['canvasItems'] as List)
+          .map((item) => LayeredCanvasItem.fromJson(item))
+          .toList(),
+      backgroundColor: Color(json['backgroundColor'] ?? Colors.white.value),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'projectId': projectId,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'pageSize': {'width': pageSize.width, 'height': pageSize.height},
+      'canvasItems': canvasItems.map((item) => item.toJson()).toList(),
+      'backgroundColor': backgroundColor.value,
+    };
+  }
+}
+
+class LayeredCanvasItem {
+  final String id;
+  final WidgetType type;
+  final Offset position;
+  final Size size;
+  final Map<String, dynamic> properties;
+  final int zIndex;
+  final double opacity;
+  final String? linkedPageId;
+
+  LayeredCanvasItem({
+    required this.id,
+    required this.type,
+    required this.position,
+    required this.size,
+    Map<String, dynamic>? properties,
+    this.zIndex = 0,
+    this.opacity = 1.0,
+    this.linkedPageId,
+  }) : properties = properties ?? {};
+
+  factory LayeredCanvasItem.fromJson(Map<String, dynamic> json) {
+    final properties = Map<String, dynamic>.from(json['properties'] ?? {});
+
+    // Deserialize Color objects
+    _deserializeColors(properties);
+
+    return LayeredCanvasItem(
+      id: json['id'],
+      type: WidgetType.values.firstWhere((e) => e.toString() == json['type']),
+      position: Offset(
+        json['position']['dx'].toDouble(),
+        json['position']['dy'].toDouble(),
+      ),
+      size: Size(
+        json['size']['width'].toDouble(),
+        json['size']['height'].toDouble(),
+      ),
+      properties: properties,
+      zIndex: json['zIndex'] ?? 0,
+      opacity: json['opacity']?.toDouble() ?? 1.0,
+      linkedPageId: json['linkedPageId'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    // Create a copy of properties and serialize colors
+    final serializedProperties = Map<String, dynamic>.from(properties);
+    _serializeColors(serializedProperties);
+
+    return {
+      'id': id,
+      'type': type.toString(),
+      'position': {'dx': position.dx, 'dy': position.dy},
+      'size': {'width': size.width, 'height': size.height},
+      'properties': serializedProperties,
+      'zIndex': zIndex,
+      'opacity': opacity,
+      'linkedPageId': linkedPageId,
+    };
+  }
+
+  // Helper method to serialize Color objects to int values
+  static void _serializeColors(Map<String, dynamic> properties) {
+    final colorKeys = [
+      'color',
+      'backgroundColor',
+      'textColor',
+      'borderColor',
+      'strokeColor',
+      'fillColor',
+      // Add more color property keys as needed
+    ];
+
+    for (final key in colorKeys) {
+      if (properties.containsKey(key)) {
+        final value = properties[key];
+        if (value is Color) {
+          properties[key] = value.value; // Convert Color to int
+        } else if (value is MaterialColor) {
+          properties[key] = value.value; // Convert MaterialColor to int
+        }
+      }
+    }
+  }
+
+  // Helper method to deserialize int values back to Color objects
+  static void _deserializeColors(Map<String, dynamic> properties) {
+    final colorKeys = [
+      'color',
+      'backgroundColor',
+      'textColor',
+      'borderColor',
+      'strokeColor',
+      'fillColor',
+      // Add more color property keys as needed
+    ];
+
+    for (final key in colorKeys) {
+      if (properties.containsKey(key)) {
+        final value = properties[key];
+        if (value is int) {
+          properties[key] = Color(value); // Convert int back to Color
+        }
+      }
+    }
+  }
+}
+
+enum WidgetType { text, button, image, card }
+
+// Navigation state management
+class NavigationState {
+  final String? currentProjectId;
+  final String? currentPageId;
+  final List<String> navigationHistory;
+
+  NavigationState({
+    this.currentProjectId,
+    this.currentPageId,
+    this.navigationHistory = const [],
+  });
+
+  NavigationState copyWith({
+    String? currentProjectId,
+    String? currentPageId,
+    List<String>? navigationHistory,
+  }) {
+    return NavigationState(
+      currentProjectId: currentProjectId ?? this.currentProjectId,
+      currentPageId: currentPageId ?? this.currentPageId,
+      navigationHistory: navigationHistory ?? this.navigationHistory,
+    );
+  }
+
+  NavigationState navigateToPage(String pageId) {
+    final newHistory = List<String>.from(navigationHistory);
+    if (currentPageId != null) {
+      newHistory.add(currentPageId!);
+    }
+
+    return NavigationState(
+      currentProjectId: currentProjectId,
+      currentPageId: pageId,
+      navigationHistory: newHistory,
+    );
+  }
+
+  NavigationState goBack() {
+    if (navigationHistory.isNotEmpty) {
+      final newHistory = List<String>.from(navigationHistory);
+      final previousPageId = newHistory.removeLast();
+
+      return NavigationState(
+        currentProjectId: currentProjectId,
+        currentPageId: previousPageId,
+        navigationHistory: newHistory,
+      );
+    }
+    return this;
+  }
+
+  bool get canGoBack => navigationHistory.isNotEmpty;
 }
